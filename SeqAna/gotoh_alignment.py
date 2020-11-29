@@ -1,5 +1,4 @@
 import numpy as np
-import sys
 from dataclasses import dataclass
 
 
@@ -14,113 +13,124 @@ class Scores:
     gap_extension: float = -0.3
 
 
-class GotohAlgorithm:
+class AlgorithmenMatrix:
     """
-    Perform the Gotoh-Algorithm for 2 Sequences to align both
-    (high cost for gap opening, small for extension)
-    ---------------------------------------------------------
+    Create different matrix
     Parameter:
     seq1 : String - First Sequence
     seq2 : String - Second Sequence
-    Output:
-        ...
+    matType: String - L/R/M = Left (gap in row), Right (gap in col), Main (gap in row & col)
     """
-    def __init__(self, seq1, seq2, score=False):
-        self.seq1 = seq1
-        self.seq2 = seq2
+    def __init__(self, seq1, seq2, matType):
         self.row = len(seq1)
         self.col = len(seq2)
-        self.choice_score = score
+        self.seq1 = seq1
+        self.seq2 = seq2
+        self.matType = matType
+        self.mat = np.zeros((self.row+1, self.col+1))
 
-        self.gap_op = Scores.gap_opening
-        self.gap_ex = Scores.gap_extension
+    def createMatrix(self):
+        if self.matType == "L":
+            self.mat[1:, 0] = [(Scores.gap_opening + i * Scores.gap_extension) for i in range(self.row)]
+        if self.matType == "R":
+            self.mat[0, 1:] = [(Scores.gap_opening + i * Scores.gap_extension) for i in range(self.col)]
+        if self.matType == "M":
+            self.mat[1:, 0] = [(Scores.gap_opening + i * Scores.gap_extension) for i in range(self.row)]
+            self.mat[0, 1:] = [(Scores.gap_opening + i * Scores.gap_extension) for i in range(self.col)]
 
-        # Create all 3 Matrices
-        mat_main = np.zeros((self.row+1, self.col+1))
-        mat_main[1:, 0] = [(self.gap_op + self.gap_ex * i) for i in range(self.row)]
-        mat_main[0, 1:] = [(self.gap_op + self.gap_ex * i) for i in range(self.col)]
-        self.mat_main = mat_main
+    def printMat(self):
+        print(self.mat)
+        return True
 
-        # Gaps costs in first ROW
-        mat_left = np.zeros((self.row+1, self.col+1))
-        mat_left[1:, 0] = [(self.gap_op + self.gap_ex * i) for i in range(self.row)]
-        self.mat_left = mat_left
 
-        # Gaps costs in first Column
-        mat_right = np.zeros((self.row+1, self.col+1))
-        mat_right[0, 1:] = [(self.gap_op + self.gap_ex * i) for i in range(self.col)]
-        self.mat_right = mat_right
+def matchScore(charA, charB):
+    if charA == charB:
+        return Scores.match
+    else:
+        return Scores.mismatch
 
-    @staticmethod
-    def MatchCase(x, y):
-        return Scores.match if (x == y) else Scores.mismatch
 
-    # Calculate Scores for "Right" Matrix (gap cost in Row)
-    def ScoreRight(self, n, m):
-        A = self.mat_main[n-1, m] + self.gap_op
-        R = self.mat_right[n-1, m] + self.gap_ex
-        return max(A, R)
+def GotohAlignment(L, R, M):
+    for n in range(1, M.row+1):
+        for m in range(1, M.col+1):
+            L.mat[n, m] = max(M.mat[n, m-1] + Scores.gap_opening, L.mat[n, m-1] + Scores.gap_extension)
+            R.mat[n, m] = max(M.mat[n-1, m] + Scores.gap_opening, R.mat[n-1, m] + Scores.gap_extension)
+            M.mat[n, m] = max(M.mat[n-1, m-1] + matchScore(M.seq1[n-1], M.seq2[m-1]), L.mat[n, m], R.mat[n, m])
 
-    # Calculate Scores for "Left" Matrix (gap extension in Column)
-    def ScoreLeft(self, n, m):
-        A = self.mat_main[n, m-1] + self.gap_op
-        L = self.mat_left[n, m-1] + self.gap_ex
-        return max(A, L)
 
-    # Calculate Scores for "Main" Matrix (gap extension in row and col)
-    def ScoreMain(self, n, m):
-        A = self.mat_main[n-1, m-1] + self.MatchCase(self.seq1[n-1], self.seq2[m-1])
-        return max(A, self.mat_left[n, m], self.mat_right[n, m])
+def BacktrackMain(n, m, L, R, M, align1, align2):
+    if n == 0:
+        while m > 0:
+            align1 = align1 + "-"
+            align2 = align2 + M.seq2[m-1]
+            m = m-1
 
-    def CalculateScoreMat(self):
-        for m in range(1, self.col+1):
-            for n in range(1, self.row+1):
-                self.mat_right[n, m] = self.ScoreRight(n, m)
-                self.mat_left[n, m] = self.ScoreLeft(n, m)
-                self.mat_main[n, m] = self.ScoreMain(n, m)
+    if m == 0:
+        while n > 0:
+            align1 = align1 + M.seq1[n-1]
+            align2 = align2 + "-"
+            n = n-1
 
-        if self.choice_score:
-            self.PrintMat(self.mat_main, "Main Matrix")
-            self.PrintMat(self.mat_left, "Left Matrix")
-            self.PrintMat(self.mat_right, "Right Matrix")
+    if n == 0 or m == 0:
+        print(align1[::-1])
+        print(align2[::-1])
+        return True
 
-        max_score = max(self.mat_main[-1, -1], self.mat_left[-1, -1], self.mat_right[-1, -1])
-        print("Best Score:\t", round(max_score, 2))
+    # Cases
+    elif M.mat[n, m] == (M.mat[n-1, m-1] + matchScore(M.seq1[n-1], M.seq2[m-1])):
+        align1 = align1 + M.seq1[n-1]
+        align2 = align2 + M.seq2[m-1]
+        BacktrackMain(n-1, m-1, L, R, M, align1, align2)
 
-    def PrintMat(self, mat, name):
-        # Needs an np.array as input
-        print("Score " + name)
-        n_str1 = "-" + self.seq1
-        print("\t -\t", "\t ".join([i for i in self.seq2]))
-        for n in range(self.row+1):
-            out = ""
-            out += n_str1[n] + "\t"
-            for m in range(self.col+1):
-                if mat[n, m] >= 0:
-                    out += " "
-                out += str(round(mat[n, m], 2)) + "\t"
-            print(out)
-        print(60*"=")
+    elif M.mat[n, m] == R.mat[n, m]:
+        BacktrackRight(n, m, L, R, M, align1, align2)
 
-    def MatTraceback(self):
-        pass
+    elif M.mat[n, m] == L.mat[n, m]:
+        BacktrackLeft(n, m, L, R, M, align1, align2)
+
+
+def BacktrackLeft(n, m, L, R, M, align1, align2):
+    if m == 0:
+        BacktrackMain(n, m, L, R, M, align1, align2)
+
+    align1 = align1 + "-"
+    align2 = align2 + M.seq2[m-1]
+
+    if L.mat[n, m] == (L.mat[n, m-1] + Scores.gap_extension):
+        BacktrackLeft(n, m-1, L, R, M, align1, align2)
+    elif L.mat[n, m] == (M.mat[n, m-1] + Scores.gap_opening):
+        BacktrackMain(n, m-1, L, R, M, align1, align2)
+
+
+def BacktrackRight(n, m, L, R, M, align1, align2):
+    if n == 0:
+        BacktrackMain(n, m, L, R, M, align1, align2)
+
+    align1 = align1 + M.seq1[n-1]
+    align2 = align2 + "-"
+
+    if R.mat[n, m] == (R.mat[n-1, m] + Scores.gap_extension):
+        BacktrackRight(n-1, m, L, R, M, align1, align2)
+    elif R.mat[n, m] == (M.mat[n-1, m] + Scores.gap_opening):
+        BacktrackMain(n-1, m, L, R, M, align1, align2)
+
+
+def main():
+    seq1, seq2 = ["ABCABCABCCCCGACGTTGAGCTCTC", "CTTTTCACCCTT"]
+
+    L = AlgorithmenMatrix(seq1, seq2, 'L')
+    R = AlgorithmenMatrix(seq1, seq2, 'R')
+    M = AlgorithmenMatrix(seq1, seq2, 'M')
+    L.createMatrix()
+    R.createMatrix()
+    M.createMatrix()
+
+    # Algorithm for matrix calculations
+    GotohAlignment(L, R, M)
+
+    # Backtrack
+    BacktrackMain(M.row, M.col, L, R, M, "", "")
 
 
 if __name__ == "__main__":
-    if len(sys.argv) > 2:
-        str1 = sys.argv[1]
-        str2 = sys.argv[2]
-    else:
-        # Example Strings
-        str1 = "ACCC"
-        str2 = "AGCTCTC"
-
-    try:
-        opt = sys.argv[-1]
-        if (opt == "-s") or (opt == "--score"):
-            opt = True
-    except IndexError:
-        opt = False
-
-    alignment = GotohAlgorithm(str1, str2, opt)
-    alignment.CalculateScoreMat()
+    main()
